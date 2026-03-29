@@ -160,6 +160,8 @@ if "history" not in st.session_state:
     st.session_state.history = []
 if "current_query" not in st.session_state:
     st.session_state.current_query = ""
+if "submit_query" not in st.session_state:
+    st.session_state.submit_query = None
 
 
 # ── Sidebar ──────────────────────────────────────────────────
@@ -192,7 +194,7 @@ with st.sidebar:
     ]
     for s in suggestions:
         if st.button(s, key=f"sug_{s}", use_container_width=True):
-            st.session_state.current_query = s
+            st.session_state.submit_query = s
 
     st.markdown("---")
 
@@ -229,36 +231,45 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# ── Resolve suggestion click before rendering input ──────────
+# If a sidebar suggestion was clicked, pre-fill and auto-submit
+query_to_run = None
+if st.session_state.submit_query:
+    query_to_run = st.session_state.submit_query
+    st.session_state.current_query = query_to_run
+    st.session_state.submit_query = None
+
 # ── Search bar ───────────────────────────────────────────────
 col_input, col_btn = st.columns([5, 1])
 
 with col_input:
     user_input = st.text_input(
         "Vos goûts littéraires",
-        value=st.session_state.current_query,
         placeholder="Ex : j'aime les romans policiers sombres...",
         label_visibility="collapsed",
         key="search_input",
+        value=st.session_state.current_query,
     )
 
 with col_btn:
     search_clicked = st.button("🔍 Chercher", type="primary", use_container_width=True)
 
+# Also run on search button click
+if not query_to_run and search_clicked and user_input.strip():
+    query_to_run = user_input.strip()
 
 # ── Process query ────────────────────────────────────────────
-if search_clicked and user_input.strip():
+if query_to_run:
     if not api_key:
         st.error("Veuillez entrer votre clé API Groq dans la barre latérale.")
     else:
-        st.session_state.current_query = ""
-
         with st.spinner("Analyse de vos préférences par l'IA..."):
-            result = st.session_state.agent.run(user_input.strip())
+            result = st.session_state.agent.run(query_to_run)
 
         if result.success:
             st.session_state.results = result
             st.session_state.history.append({
-                "query": user_input.strip(),
+                "query": query_to_run,
                 "genres": result.genres,
                 "mood": result.mood,
             })
