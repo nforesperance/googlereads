@@ -11,7 +11,13 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from src.agent import BookAgent
-from src.recommender import current_backend, set_backend
+from src.recommender import (
+    DATA_PATH,
+    current_backend,
+    current_data_path,
+    list_data_csvs,
+    set_backend,
+)
 
 load_dotenv()
 
@@ -184,6 +190,8 @@ if "submit_query" not in st.session_state:
     st.session_state.submit_query = None
 if "backend" not in st.session_state:
     st.session_state.backend = os.getenv("RECOMMENDER_BACKEND", "tfidf").lower()
+if "data_path" not in st.session_state:
+    st.session_state.data_path = DATA_PATH
 
 
 # ── Resolve API key from env / secrets ───────────────────────
@@ -237,13 +245,36 @@ with st.sidebar:
         index=list(backend_labels.keys()).index(st.session_state.backend),
         label_visibility="collapsed",
     )
-    if backend_choice != st.session_state.backend or current_backend() != backend_choice:
-        with st.spinner(f"Chargement du backend « {backend_labels[backend_choice]} »..."):
-            set_backend(backend_choice)
+
+    st.markdown("## 📁 Source de données")
+    csv_paths = list_data_csvs() or [DATA_PATH]
+    if st.session_state.data_path not in csv_paths:
+        st.session_state.data_path = csv_paths[0]
+    data_choice = st.selectbox(
+        "Dataset",
+        options=csv_paths,
+        index=csv_paths.index(st.session_state.data_path),
+        format_func=lambda p: os.path.basename(p),
+        label_visibility="collapsed",
+    )
+
+    needs_reload = (
+        backend_choice != current_backend()
+        or data_choice != current_data_path()
+    )
+    if needs_reload:
+        with st.spinner(
+            f"Chargement de « {backend_labels[backend_choice]} » "
+            f"sur {os.path.basename(data_choice)}..."
+        ):
+            set_backend(backend_choice, data_path=data_choice)
         st.session_state.backend = backend_choice
-        st.caption(f"Actif : {backend_labels[backend_choice]}")
-    else:
-        st.caption(f"Actif : {backend_labels[backend_choice]}")
+        st.session_state.data_path = data_choice
+
+    st.caption(
+        f"Actif : {backend_labels[backend_choice]} · "
+        f"{os.path.basename(data_choice)}"
+    )
 
     st.markdown("---")
 
@@ -373,7 +404,7 @@ if result and result.success:
         desc = match.iloc[0]["description"] if not match.empty else ""
 
         score_pct = int(book["score"] * 100)
-        genre_list = [g.strip() for g in book["genres"].split(",")]
+        genre_list = [g.strip() for g in book["genres"].split(",") if g.strip()]
         pills = "".join(f'<span class="genre-pill">{g}</span>' for g in genre_list)
 
         st.markdown(f"""

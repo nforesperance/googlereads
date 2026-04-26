@@ -14,9 +14,21 @@ from sklearn.neighbors import NearestNeighbors
 
 load_dotenv()
 
-DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "books.csv")
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+DATA_PATH = os.path.join(DATA_DIR, "books.csv")
 DEFAULT_BACKEND = os.getenv("RECOMMENDER_BACKEND", "tfidf").lower()
 DEFAULT_ST_MODEL = os.getenv("RECOMMENDER_ST_MODEL", "all-MiniLM-L6-v2")
+
+
+def list_data_csvs() -> list[str]:
+    """Liste tous les CSV trouvés dans data/, chemins absolus triés."""
+    if not os.path.isdir(DATA_DIR):
+        return []
+    return sorted(
+        os.path.join(DATA_DIR, f)
+        for f in os.listdir(DATA_DIR)
+        if f.lower().endswith(".csv")
+    )
 
 
 class BookRecommender:
@@ -32,6 +44,7 @@ class BookRecommender:
                 f"backend doit être 'tfidf' ou 'sentence-transformers', reçu: {self.backend}"
             )
 
+        self.data_path = data_path
         self.df = self._load_and_clean(data_path)
 
         if self.backend == "tfidf":
@@ -56,14 +69,21 @@ class BookRecommender:
 
     def _load_and_clean(self, path: str) -> pd.DataFrame:
         df = pd.read_csv(path)
-        required = ["title", "author", "genres", "description"]
+        required = ["title", "description"]
         for col in required:
             if col not in df.columns:
-                raise ValueError(f"Colonne manquante dans le dataset : {col}")
-        df = df[required].dropna().reset_index(drop=True)
-        df["genres"] = df["genres"].str.strip()
-        df["description"] = df["description"].str.strip()
-        df["combined"] = df["genres"] + " " + df["description"]
+                raise ValueError(f"Colonne requise manquante dans le dataset : {col}")
+
+        for col in ("author", "genres"):
+            if col not in df.columns:
+                df[col] = ""
+
+        df = df[["title", "author", "genres", "description"]]
+        df = df.dropna(subset=required).reset_index(drop=True)
+        for col in ("title", "author", "genres", "description"):
+            df[col] = df[col].fillna("").astype(str).str.strip()
+
+        df["combined"] = (df["genres"] + " " + df["description"]).str.strip()
         return df
 
     def recommend(self, genres: list[str], mood: str = "") -> list[dict]:
@@ -106,16 +126,24 @@ def get_recommender(backend: str | None = None) -> BookRecommender:
     return _recommender
 
 
-def set_backend(backend: str) -> BookRecommender:
-    """Force la reconstruction de l'instance globale avec un nouveau backend."""
+def set_backend(backend: str, data_path: str | None = None) -> BookRecommender:
+    """Force la reconstruction de l'instance globale avec un nouveau backend / dataset."""
     global _recommender
-    _recommender = BookRecommender(backend=backend)
+    _recommender = BookRecommender(
+        data_path=data_path or DATA_PATH,
+        backend=backend,
+    )
     return _recommender
 
 
 def current_backend() -> str | None:
     """Retourne le backend de l'instance globale, ou None si non initialisée."""
     return _recommender.backend if _recommender else None
+
+
+def current_data_path() -> str | None:
+    """Retourne le chemin de dataset de l'instance globale, ou None si non initialisée."""
+    return _recommender.data_path if _recommender else None
 
 
 def recommend(genres: list[str], mood: str = "", backend: str | None = None) -> list[dict]:
