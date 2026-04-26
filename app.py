@@ -393,6 +393,12 @@ if result and result.success:
     </div>
     """, unsafe_allow_html=True)
 
+    # RAG explanation (collapsed by default)
+    explanation = getattr(result, "explanation", "")
+    if explanation:
+        with st.expander("💡 Pourquoi ces livres ? (généré par l'IA)", expanded=False):
+            st.markdown(explanation)
+
     # Book cards — 2 columns top, then remaining
     st.markdown("### Vos recommandations")
 

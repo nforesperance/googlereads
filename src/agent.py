@@ -5,7 +5,8 @@ Appelle le module LLM pour comprendre l'utilisateur, passe le résultat
 au module ML, et formate une réponse claire et naturelle.
 """
 
-from src.llm_parser import parse_preferences
+from src.llm_parser import  parse_preferences
+from src.rag import generate_explanation
 from src.recommender import recommend
 
 
@@ -13,10 +14,11 @@ class AgentResult:
     """Résultat structuré d'une requête à l'agent."""
 
     def __init__(self, books: list[dict], genres: list[str], mood: str,
-                 error: str | None = None):
+                 explanation: str = "", error: str | None = None):
         self.books = books
         self.genres = genres
         self.mood = mood
+        self.explanation = explanation
         self.error = error
         self.success = error is None
 
@@ -69,7 +71,7 @@ class BookAgent:
         genres = preferences.get("genres", [])
         mood = preferences.get("mood", "")
 
-        # Étape 2 : Obtenir les recommandations via le module ML
+        # Étape 2 : Obtenir les recommandations via le module ML (retrieval)
         try:
             books = recommend(genres, mood)
         except Exception as e:
@@ -80,7 +82,15 @@ class BookAgent:
             self.history.append({"role": "agent", "message": result.error})
             return result
 
-        result = AgentResult(books=books, genres=genres, mood=mood)
+        # Étape 3 : Générer une présentation narrative (RAG : retrieval-augmented generation)
+        explanation = ""
+        try:
+            explanation = generate_explanation(user_input, books)
+        except Exception:
+            # On ne casse pas le pipeline si la génération échoue
+            explanation = ""
+
+        result = AgentResult(books=books, genres=genres, mood=mood, explanation=explanation)
         self.history.append({"role": "agent", "message": result.format_text()})
         return result
 

@@ -110,6 +110,7 @@ class BookRecommender:
                 "title": row["title"],
                 "author": row["author"],
                 "genres": row["genres"],
+                "description": row["description"],
                 "score": round(1 - distances[0][i], 3),
             })
         return results
