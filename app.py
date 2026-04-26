@@ -5,9 +5,29 @@ Application web interactive de recommandation de livres
 combinant LLM (Groq) + ML (k-NN / TF-IDF) + Agent intelligent.
 """
 
+import os
+
 import streamlit as st
+from dotenv import load_dotenv
 
 from src.agent import BookAgent
+from src.recommender import current_backend, set_backend
+
+load_dotenv()
+
+
+def resolve_api_key() -> tuple[str, str]:
+    """Cherche la clé Groq dans l'env puis dans st.secrets. Retourne (clé, source)."""
+    key = os.getenv("GROQ_API_KEY", "")
+    if key:
+        return key, "env"
+    try:
+        key = st.secrets.get("GROQ_API_KEY", "")
+        if key:
+            return key, "secrets"
+    except Exception:
+        pass
+    return "", ""
 
 
 # ── Page config ──────────────────────────────────────────────
@@ -162,24 +182,68 @@ if "current_query" not in st.session_state:
     st.session_state.current_query = ""
 if "submit_query" not in st.session_state:
     st.session_state.submit_query = None
+if "backend" not in st.session_state:
+    st.session_state.backend = os.getenv("RECOMMENDER_BACKEND", "tfidf").lower()
+
+
+# ── Resolve API key from env / secrets ───────────────────────
+preset_key, key_source = resolve_api_key()
+if preset_key:
+    os.environ["GROQ_API_KEY"] = preset_key
 
 
 # ── Sidebar ──────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## ⚙️ Configuration")
 
-    api_key = st.text_input(
-        "Clé API Groq",
-        type="password",
-        placeholder="gsk_...",
-        help="Créez un compte gratuit sur console.groq.com",
-    )
-    if api_key:
-        import os
-        os.environ["GROQ_API_KEY"] = api_key
-        st.success("Clé API configurée", icon="✅")
+    if preset_key:
+        source_label = ".env" if key_source == "env" else "Streamlit secrets"
+        st.success(f"Clé API configurée ({source_label})", icon="✅")
+        with st.expander("Utiliser une autre clé"):
+            override = st.text_input(
+                "Clé API Groq",
+                type="password",
+                placeholder="gsk_...",
+                key="api_key_override",
+            )
+            if override:
+                os.environ["GROQ_API_KEY"] = override
+                st.caption("Clé personnalisée active pour cette session.")
+        api_key = os.environ.get("GROQ_API_KEY", "")
     else:
-        st.info("Entrez votre clé API Groq pour commencer", icon="🔑")
+        api_key = st.text_input(
+            "Clé API Groq",
+            type="password",
+            placeholder="gsk_...",
+            help="Créez un compte gratuit sur console.groq.com",
+        )
+        if api_key:
+            os.environ["GROQ_API_KEY"] = api_key
+            st.success("Clé API configurée", icon="✅")
+        else:
+            st.info("Entrez votre clé API Groq pour commencer", icon="🔑")
+
+    st.markdown("---")
+
+    st.markdown("## 🧠 Moteur de recommandation")
+    backend_labels = {
+        "tfidf": "TF-IDF (rapide, lexical)",
+        "sentence-transformers": "Sentence-Transformers (sémantique)",
+    }
+    backend_choice = st.radio(
+        "Backend",
+        options=list(backend_labels.keys()),
+        format_func=lambda k: backend_labels[k],
+        index=list(backend_labels.keys()).index(st.session_state.backend),
+        label_visibility="collapsed",
+    )
+    if backend_choice != st.session_state.backend or current_backend() != backend_choice:
+        with st.spinner(f"Chargement du backend « {backend_labels[backend_choice]} »..."):
+            set_backend(backend_choice)
+        st.session_state.backend = backend_choice
+        st.caption(f"Actif : {backend_labels[backend_choice]}")
+    else:
+        st.caption(f"Actif : {backend_labels[backend_choice]}")
 
     st.markdown("---")
 
