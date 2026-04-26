@@ -289,6 +289,7 @@ with st.sidebar:
     ]
     for s in suggestions:
         if st.button(s, key=f"sug_{s}", use_container_width=True):
+            st.session_state["search_input"] = s
             st.session_state.submit_query = s
 
     st.markdown("---")
@@ -334,20 +335,20 @@ if st.session_state.submit_query:
     st.session_state.current_query = query_to_run
     st.session_state.submit_query = None
 
-# ── Search bar ───────────────────────────────────────────────
-col_input, col_btn = st.columns([5, 1])
-
-with col_input:
-    user_input = st.text_input(
-        "Vos goûts littéraires",
-        placeholder="Ex : j'aime les romans policiers sombres...",
-        label_visibility="collapsed",
-        key="search_input",
-        value=st.session_state.current_query,
-    )
-
-with col_btn:
-    search_clicked = st.button("🔍 Chercher", type="primary", use_container_width=True)
+# ── Search bar (form so Enter submits) ───────────────────────
+with st.form("search_form", clear_on_submit=False):
+    col_input, col_btn = st.columns([5, 1])
+    with col_input:
+        user_input = st.text_input(
+            "Vos goûts littéraires",
+            placeholder="Ex : j'aime les romans policiers sombres...",
+            label_visibility="collapsed",
+            key="search_input",
+        )
+    with col_btn:
+        search_clicked = st.form_submit_button(
+            "🔍 Chercher", type="primary", use_container_width=True
+        )
 
 # Also run on search button click
 if not query_to_run and search_clicked and user_input.strip():
